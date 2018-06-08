@@ -5,10 +5,12 @@ using System.Runtime.InteropServices.WindowsRuntime;
 using System.Threading.Tasks;
 using AutoMapper;
 using Library.API.Entities;
+using Library.API.Helpers;
 using Library.API.Models;
 using Library.API.Services;
 using Microsoft.AspNetCore.JsonPatch;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 
 namespace Library.API.Controllers
 {
@@ -16,9 +18,11 @@ namespace Library.API.Controllers
     public class BooksController : Controller
     {
         private ILibraryRepository _libraryRepository;
-        public BooksController(ILibraryRepository libraryRepository)
+        private ILogger<BooksController> _logger;
+        public BooksController(ILibraryRepository libraryRepository, ILogger<BooksController> logger)
         {
             _libraryRepository = libraryRepository;
+            _logger = logger;
         }
 
         [HttpGet]
@@ -46,6 +50,11 @@ namespace Library.API.Controllers
         public IActionResult CreateBookForAuthor(Guid authorId, [FromBody] BookForCreationDto book)
         {
             if (book == null) return BadRequest();
+
+            if (book.Description == book.Title) ModelState.AddModelError(nameof(BookForCreationDto), "Title and Description cannot be the same");
+
+            if (!ModelState.IsValid) return new UnprocessableEntityObjectResult(ModelState);
+
             if (!_libraryRepository.AuthorExists(authorId)) return NotFound();
 
             var bookEntity = Mapper.Map<Book>(book);
@@ -70,6 +79,8 @@ namespace Library.API.Controllers
             _libraryRepository.DeleteBook(bookForAuthorFromRepo);
             if (!_libraryRepository.Save()) throw new Exception("Error occurred while trying to delete the book");
 
+            _logger.LogInformation(100, $"Book {id} for author {authorId} was successfully deleted");
+
             return NoContent();
         }
 
@@ -77,6 +88,10 @@ namespace Library.API.Controllers
         public IActionResult UpdateBookForAuthor(Guid authorId, Guid id, [FromBody] BookForUpdateDto book)
         {
             if (book == null) return BadRequest();
+
+            if (book.Description == book.Title) ModelState.AddModelError(nameof(BookForUpdateDto), "Title and Description cannot be the same");
+
+            if (!ModelState.IsValid) return new UnprocessableEntityObjectResult(ModelState);
 
             if (!_libraryRepository.AuthorExists(authorId)) return NotFound();
 
@@ -116,7 +131,13 @@ namespace Library.API.Controllers
             if (bookForAuthorFromRepo == null)
             {
                 var bookDto = new BookForUpdateDto();
-                patchDoc.ApplyTo(bookDto);
+                patchDoc.ApplyTo(bookDto, ModelState);
+
+                if (bookDto.Description == bookDto.Title) ModelState.AddModelError(nameof(BookForUpdateDto), "The provided description must be different from the title");
+
+                TryValidateModel(bookDto);
+
+                if (!ModelState.IsValid) return new UnprocessableEntityObjectResult(ModelState);
 
                 var bookToAdd = Mapper.Map<Book>(bookDto);
                 bookToAdd.Id = id;
@@ -131,7 +152,13 @@ namespace Library.API.Controllers
             }
 
             var bookToPatch = Mapper.Map<BookForUpdateDto>(bookForAuthorFromRepo);
-            patchDoc.ApplyTo(bookToPatch);
+            patchDoc.ApplyTo(bookToPatch, ModelState);
+            
+            if (bookToPatch.Description == bookToPatch.Title) ModelState.AddModelError(nameof(BookForUpdateDto), "The provided description must be different from the title");
+
+            TryValidateModel(bookToPatch);
+
+            if(!ModelState.IsValid) return new UnprocessableEntityObjectResult(ModelState);
 
             //Add validation
 
