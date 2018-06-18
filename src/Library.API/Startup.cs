@@ -18,6 +18,7 @@ using Microsoft.AspNetCore.Mvc.Formatters;
 using Microsoft.AspNetCore.Mvc.Infrastructure;
 using Microsoft.AspNetCore.Mvc.Routing;
 using Microsoft.EntityFrameworkCore;
+using Newtonsoft.Json.Serialization;
 using NLog.Extensions.Logging;
 
 namespace Library.API
@@ -40,6 +41,9 @@ namespace Library.API
                 setupAction.ReturnHttpNotAcceptable = true; //Will return 406 if someone requests a content type that isn't supported by the api
                 setupAction.OutputFormatters.Add(new XmlDataContractSerializerOutputFormatter()); //Allows the api to return the data in xml format
                 setupAction.InputFormatters.Add(new XmlDataContractSerializerInputFormatter());
+            }).AddJsonOptions(options =>
+            {
+                options.SerializerSettings.ContractResolver = new CamelCasePropertyNamesContractResolver();
             });
 
             // register the DbContext on the container, getting the connection string from
@@ -57,6 +61,9 @@ namespace Library.API
                 var actionContext = implementationFactory.GetService<IActionContextAccessor>().ActionContext;
                 return new UrlHelper(actionContext);
             });
+
+            services.AddTransient<IPropertyMappingService, PropertyMappingService>();
+            services.AddTransient<ITypeHelperService, TypeHelperService>();
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
